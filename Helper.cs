@@ -12,7 +12,7 @@ namespace RaytracerSharp {
         }
 
         public static Color ColorFromVector(Vector3 color) {
-            color = Raymath.Vector3ClampValue(color, 0, 1);
+            color = Raymath.Vector3Clamp(color, Vector3.Zero, Vector3.One);
             return new Color((int) MathF.Floor(color.X*255f), (int) MathF.Floor(color.Y*255f), (int) MathF.Floor(color.Z*255f), 255);
         }
 
@@ -55,6 +55,10 @@ namespace RaytracerSharp {
             float r0 = (1-refIdx) / (1+refIdx);
             r0 = r0*r0;
             return r0 + (1-r0)*MathF.Pow((1 - cosine), 5.0f);
+        }
+
+        public static Vector3 FromVector4(Vector4 vector4) {
+            return new Vector3(vector4.X, vector4.Y, vector4.Z);
         }
     }
 }

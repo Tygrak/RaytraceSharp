@@ -9,6 +9,8 @@ namespace RaytracerSharp {
         public int Height = 480;
         public int SamplesPerPixelPerPass = 16;
         public int MaxDepth = 16;
+        public bool UseSceneCamera = true;
+
         private Camera3D Camera = new Camera3D(new Vector3(25f, 15f, -1.5f), new Vector3(0, 0, 0), new Vector3(0, 1, 0), 45, CameraProjection.CAMERA_PERSPECTIVE);
         public static Random random = new Random();
         private Image target;
@@ -18,10 +20,10 @@ namespace RaytracerSharp {
         private int currentRenderedLine = 0;
         private int currentRenderPass = 0;
         private Stopwatch currentFrameWatch = Stopwatch.StartNew();
+        private Scene currentScene = DefinedScenes.CornellBox();
 
         private (Vector3 color, int samples)[,] accumulatedColor = new (Vector3 color, int samples)[1, 1];
 
-        private Scene currentScene = DefinedScenes.DarkScene();
 
         public void Start() {
             Width = 800;
@@ -39,6 +41,9 @@ namespace RaytracerSharp {
             accumulatedColor = new (Vector3 color, int samples)[Width, Height];
             Raylib.InitWindow(Width, Height, "RaytracerSharp");
             target = Raylib.GenImageChecked(Width, Height, 10, 10, Color.DARKGRAY, Color.GRAY);
+            if (UseSceneCamera) {
+                Camera = currentScene.DefaultCamera;
+            }
             RenderLoop();
         }
         
@@ -59,26 +64,32 @@ namespace RaytracerSharp {
                 Console.WriteLine($"Start (previous samples: {accumulatedColor[0, 0].samples})");
                 currentFrameWatch = Stopwatch.StartNew();
             }
-            int targetLine = Math.Min(currentRenderedLine+30, Height);
+            int targetLine = Math.Min(currentRenderedLine+16, Height);
             int samples = SamplesPerPixelPerPass;
             if (currentRenderPass == 0) {
                 samples = 2;
             } else if (currentRenderPass == 1) {
                 samples = SamplesPerPixelPerPass-2;
             }
-            for (int y = currentRenderedLine; y < targetLine; y++) {
-                if (y % 30 == 0) {
+            Parallel.ForEach(Enumerable.Range(currentRenderedLine, targetLine-currentRenderedLine).ToList(), y => {
+                for (int x = 0; x < Width; x++) {
+                    RenderPixel(x, y, samples);
+                }
+            });
+            /*for (int y = currentRenderedLine; y < targetLine; y++) {
+                if (y % 50 == 0) {
                     Console.WriteLine($"Line {y}");
-                    Raylib.UpdateTextureRec(texture, new Rectangle(0, 0, Width, Height), target.data);
-                    statusText = $"{(((float) y/Height)*100).ToString("0.00")}% (samples: {accumulatedColor[0, 0].samples})";
-                    RenderFromTexture(texture);
                 }
                 for (int x = 0; x < Width; x++) {
                     RenderPixel(x, y, samples);
                 }
-                currentRenderedLine = y;
+            }*/
+            currentRenderedLine = targetLine;
+            if (accumulatedColor[0, 0].samples < 100 || currentRenderedLine >= Height) {
+                Raylib.UpdateTextureRec(texture, new Rectangle(0, 0, Width, Height), target.data);
+                statusText = $"(samples: {accumulatedColor[0, 0].samples})";
+                RenderFromTexture(texture);
             }
-            currentRenderedLine++;
             if (currentRenderedLine >= Height) {
                 currentRenderedLine = 0;
                 currentRenderPass++;
@@ -89,10 +100,6 @@ namespace RaytracerSharp {
         }
 
         private void RenderPixel(int x, int y, int numberOfSamples) {
-            /*Parallel.ForEach(Enumerable.Range(0, numberOfSamples).ToList(), sample => {
-                Ray ray = Raylib.GetMouseRay(new Vector2(x+(float) (random.NextDouble())-0.5f, y+(float) (random.NextDouble())-0.5f), Camera);
-                accumulatedColor[x, y] = (accumulatedColor[x, y].color+RenderRay(ray, MaxDepth), accumulatedColor[x, y].samples+1);
-            });*/
             for (int samples = 0; samples < numberOfSamples; samples++) {
                 Ray ray = Raylib.GetMouseRay(new Vector2(x+(float) (random.NextDouble())-0.5f, y+(float) (random.NextDouble())-0.5f), Camera);
                 accumulatedColor[x, y] = (accumulatedColor[x, y].color+RenderRay(ray, MaxDepth), accumulatedColor[x, y].samples+1);
