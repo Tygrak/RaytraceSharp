@@ -1,36 +1,42 @@
 using Raylib_cs;
 using System.Numerics;
 using System;
+using System.Diagnostics;
 
 namespace RaytracerSharp {
     public class Renderer {
         public int Width = 800;
         public int Height = 480;
-        public int SamplesPerPixel = 8;
+        public int SamplesPerPixelPerPass = 16;
         public int MaxDepth = 16;
-        private Camera3D Camera = new Camera3D(new Vector3(0, 0, -10), new Vector3(0, 0, 0), new Vector3(0, 1, 0), 45, CameraProjection.CAMERA_PERSPECTIVE);
+        private Camera3D Camera = new Camera3D(new Vector3(25f, 15f, -1.5f), new Vector3(0, 0, 0), new Vector3(0, 1, 0), 45, CameraProjection.CAMERA_PERSPECTIVE);
         public static Random random = new Random();
         private Image target;
         private Texture2D texture;
+        private string statusText = "";
 
-        private List<Hittable> hittables = new List<Hittable>(){
-            new Sphere(new Vector3(0,  0, 0), 2.5f, new LambertianMaterial(new Vector3(0.7f, 0.3f, 0.3f))), 
-            new Sphere(new Vector3(-4.5f, -1, 0), 2.0f, new MetalMaterial(new Vector3(0.8f, 0.8f, 0.8f))), 
-            new Sphere(new Vector3(4.5f,  -1, 0), 2.5f, new MetalMaterial(new Vector3(0.8f, 0.6f, 0.2f))), 
-            new Sphere(new Vector3(0, -100.5f, 0), 98.0f, new LambertianMaterial(new Vector3(0.8f, 0.8f, 0.0f)))
-            };
+        private int currentRenderedLine = 0;
+        private int currentRenderPass = 0;
+        private Stopwatch currentFrameWatch = Stopwatch.StartNew();
+
+        private (Vector3 color, int samples)[,] accumulatedColor = new (Vector3 color, int samples)[1, 1];
+
+        private Scene currentScene = DefinedScenes.DarkScene();
 
         public void Start() {
             Width = 800;
             Height = 480;
-            Raylib.InitWindow(Width, Height, "RaytracerSharp");
-            target = Raylib.GenImageChecked(Width, Height, 10, 10, Color.DARKGRAY, Color.GRAY);
-            RenderLoop();
+            Init();
         }
 
         public void Start(int width, int height) {
             Width = width;
             Height = height;
+            Init();
+        }
+
+        private void Init() {
+            accumulatedColor = new (Vector3 color, int samples)[Width, Height];
             Raylib.InitWindow(Width, Height, "RaytracerSharp");
             target = Raylib.GenImageChecked(Width, Height, 10, 10, Color.DARKGRAY, Color.GRAY);
             RenderLoop();
@@ -42,29 +48,58 @@ namespace RaytracerSharp {
             RenderSceneToImage();
             Raylib.UpdateTextureRec(texture, new Rectangle(0, 0, Width, Height), target.data);
             while (!Raylib.WindowShouldClose()) {
-                RenderFromTexture(texture);
+                RenderSceneToImage();
+                //RenderFromTexture(texture);
             }
             Raylib.CloseWindow();
         }
 
-        private void RenderSceneToImage() {
-            Console.WriteLine("Start");
-            for (int y = 0; y < Height; y++) {
-                if (y % 10 == 0) {
+        private unsafe void RenderSceneToImage() {
+            if (currentRenderedLine == 0) {
+                Console.WriteLine($"Start (previous samples: {accumulatedColor[0, 0].samples})");
+                currentFrameWatch = Stopwatch.StartNew();
+            }
+            int targetLine = Math.Min(currentRenderedLine+30, Height);
+            int samples = SamplesPerPixelPerPass;
+            if (currentRenderPass == 0) {
+                samples = 2;
+            } else if (currentRenderPass == 1) {
+                samples = SamplesPerPixelPerPass-2;
+            }
+            for (int y = currentRenderedLine; y < targetLine; y++) {
+                if (y % 30 == 0) {
                     Console.WriteLine($"Line {y}");
+                    Raylib.UpdateTextureRec(texture, new Rectangle(0, 0, Width, Height), target.data);
+                    statusText = $"{(((float) y/Height)*100).ToString("0.00")}% (samples: {accumulatedColor[0, 0].samples})";
+                    RenderFromTexture(texture);
                 }
                 for (int x = 0; x < Width; x++) {
-                    Vector3 colorVector = new Vector3();
-                    for (int samples = 0; samples < SamplesPerPixel; samples++) {
-                        Ray ray = Raylib.GetMouseRay(new Vector2(x+(float) (random.NextDouble())-0.5f, y+(float) (random.NextDouble())-0.5f), Camera);
-                        colorVector += RenderRay(ray, MaxDepth);
-                    }
-                    colorVector /= SamplesPerPixel;
-                    colorVector = new Vector3(MathF.Sqrt(colorVector.X), MathF.Sqrt(colorVector.Y), MathF.Sqrt(colorVector.Z));
-                    Raylib.ImageDrawPixel(ref target, x, y, Helper.ColorFromVector(colorVector));
+                    RenderPixel(x, y, samples);
                 }
+                currentRenderedLine = y;
             }
-            Console.WriteLine("Finished");
+            currentRenderedLine++;
+            if (currentRenderedLine >= Height) {
+                currentRenderedLine = 0;
+                currentRenderPass++;
+                currentFrameWatch.Stop();
+                long elapsedMs = currentFrameWatch.ElapsedMilliseconds;
+                Console.WriteLine($"Finished ({elapsedMs/1000.0f}s)");
+            }
+        }
+
+        private void RenderPixel(int x, int y, int numberOfSamples) {
+            /*Parallel.ForEach(Enumerable.Range(0, numberOfSamples).ToList(), sample => {
+                Ray ray = Raylib.GetMouseRay(new Vector2(x+(float) (random.NextDouble())-0.5f, y+(float) (random.NextDouble())-0.5f), Camera);
+                accumulatedColor[x, y] = (accumulatedColor[x, y].color+RenderRay(ray, MaxDepth), accumulatedColor[x, y].samples+1);
+            });*/
+            for (int samples = 0; samples < numberOfSamples; samples++) {
+                Ray ray = Raylib.GetMouseRay(new Vector2(x+(float) (random.NextDouble())-0.5f, y+(float) (random.NextDouble())-0.5f), Camera);
+                accumulatedColor[x, y] = (accumulatedColor[x, y].color+RenderRay(ray, MaxDepth), accumulatedColor[x, y].samples+1);
+            }
+            Vector3 colorVector = accumulatedColor[x, y].color/accumulatedColor[x, y].samples;
+            colorVector = new Vector3(MathF.Sqrt(colorVector.X), MathF.Sqrt(colorVector.Y), MathF.Sqrt(colorVector.Z));
+            Raylib.ImageDrawPixel(ref target, x, y, Helper.ColorFromVector(colorVector));
         }
 
         private Vector3 RenderRay(Ray ray, int depth) {
@@ -73,23 +108,23 @@ namespace RaytracerSharp {
             }
             HitRecord? result = RayHitWorld(ray);
             if (result is HitRecord hit) {
-                var scattered = hit.Material.Scatter(ray, hit.RayCollision);
+                var scattered = hit.Material.Scatter(ray, hit);
+                Vector3 emitted = hit.Material.Emit(hit.Uv);
                 if (scattered.reflect) {
                     Vector3 col = scattered.attenuation*RenderRay(scattered.scattered, depth-1);
                     //return h.normal*0.5f+Vector3.One*0.5f;
-                    return col;
+                    return col+emitted;
                 }
-                return Vector3.Zero;
+                return Vector3.Zero+emitted;
             } else {
-                Vector3 colorVector = Raymath.Vector3Lerp(new Vector3(1, 1, 1), new Vector3(0.25f, 0.25f, 0.75f), MathF.Max(Vector3.Normalize(ray.direction).Y, 0));
-                return colorVector;
+                return currentScene.SkyFunction.Invoke(ray.direction);
             }
         }
 
         private HitRecord? RayHitWorld(Ray ray) {
             HitRecord? closest = null;
-            for (int i = 0; i < hittables.Count; i++) {
-                var hit = hittables[i].Hit(ray, 0.001f, float.PositiveInfinity);
+            for (int i = 0; i < currentScene.Objects.Count; i++) {
+                var hit = currentScene.Objects[i].Hit(ray, 0.001f, float.PositiveInfinity);
                 if (hit.Hit && (closest == null || hit.distance < closest.Value.distance)) {
                     closest = hit;
                 }
@@ -102,7 +137,7 @@ namespace RaytracerSharp {
             Raylib.ClearBackground(Color.WHITE);
             Raylib.DrawTexture(texture2D, 0, 0, Color.WHITE);
 
-            //Raylib.DrawText("Finished!", 12, 12, 16, Color.BLACK);
+            Raylib.DrawText(statusText, 8, 8, 8, Color.PINK);
 
             Raylib.EndDrawing();
         }

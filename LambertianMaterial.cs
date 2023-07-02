@@ -10,12 +10,12 @@ namespace RaytracerSharp {
             Albedo = albedo;
         }
 
-        public override (bool reflect, Vector3 attenuation, Ray scattered) Scatter(Ray ray, RayCollision rayCollision) {
-            Vector3 scatterDirection = rayCollision.normal + Helper.RandomUnitVector(Renderer.random);
+        public override (bool reflect, Vector3 attenuation, Ray scattered) Scatter(Ray ray, HitRecord hitRecord) {
+            Vector3 scatterDirection = hitRecord.normal + Helper.RandomUnitVector(Renderer.random);
             if (scatterDirection.LengthSquared() < 0.001f) {
-                scatterDirection = rayCollision.normal;
+                scatterDirection = hitRecord.normal;
             }
-            Ray scattered = new Ray(rayCollision.point, scatterDirection);
+            Ray scattered = new Ray(hitRecord.point, scatterDirection);
             Vector3 attenuation = Albedo;
             return (true, attenuation, scattered);
         }

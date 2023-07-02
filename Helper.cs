@@ -38,5 +38,23 @@ namespace RaytracerSharp {
                 return -inUnitSphere;
             }
         }
+
+        public static Vector3 Refract(Vector3 uv, Vector3 n, float etaiOverEtat) {
+            float cosTheta = MathF.Min(Vector3.Dot(-uv, n), 1.0f);
+            Vector3 rOutPerp =  etaiOverEtat * (uv + cosTheta*n);
+            Vector3 rOutParallel = -MathF.Sqrt(MathF.Abs(1.0f - rOutPerp.LengthSquared())) * n;
+            return rOutPerp + rOutParallel;
+        }
+
+        public static bool IsFrontFace(Vector3 direction, Vector3 normal) {
+            return Vector3.Dot(direction, normal) < 0;
+        }
+
+        public static float SchlickReflectance(float cosine, float refIdx) {
+            // Use Schlick's approximation for reflectance.
+            float r0 = (1-refIdx) / (1+refIdx);
+            r0 = r0*r0;
+            return r0 + (1-r0)*MathF.Pow((1 - cosine), 5.0f);
+        }
     }
 }
