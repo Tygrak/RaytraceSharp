@@ -12,7 +12,8 @@ namespace RaytracerSharp {
         }
 
         public static Color ColorFromVector(Vector3 color) {
-            return new Color((int) MathF.Floor(color.X*255.999f), (int) MathF.Floor(color.Y*255.999f), (int) MathF.Floor(color.Z*255.999f), 255);
+            color = Raymath.Vector3ClampValue(color, 0, 1);
+            return new Color((int) MathF.Floor(color.X*255f), (int) MathF.Floor(color.Y*255f), (int) MathF.Floor(color.Z*255f), 255);
         }
 
         public static Vector3 RandomInUnitSphere(Random random) {
@@ -22,6 +23,19 @@ namespace RaytracerSharp {
                     continue;
                 }
                 return p;
+            }
+        }
+
+        public static Vector3 RandomUnitVector(Random random) {
+            return Vector3.Normalize(RandomInUnitSphere(random));
+        }
+
+        public static Vector3 RandomInHemisphere(Random random, Vector3 normal) {
+            Vector3 inUnitSphere = RandomInUnitSphere(random);
+            if (Vector3.Dot(inUnitSphere, normal) > 0.0) {
+                return inUnitSphere;
+            } else {
+                return -inUnitSphere;
             }
         }
     }
