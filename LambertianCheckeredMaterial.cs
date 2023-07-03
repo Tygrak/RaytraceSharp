@@ -8,13 +8,14 @@ namespace RaytracerSharp {
         public Vector3 Albedo2;
         public int Repetitions = 32;
 
-        public LambertianCheckeredMaterial(Vector3 albedo1, Vector3 albedo2) {
+        public LambertianCheckeredMaterial(Vector3 albedo1, Vector3 albedo2, int repetitions = 32) {
             Albedo1 = albedo1;
             Albedo2 = albedo2;
+            Repetitions = repetitions;
         }
 
         public override (bool reflect, Vector3 attenuation, Ray scattered) Scatter(Ray ray, HitRecord hitRecord) {
-            Vector3 scatterDirection = hitRecord.normal + Helper.RandomUnitVector(Renderer.random);
+            Vector3 scatterDirection = Vector3.Normalize(hitRecord.normal + Helper.RandomUnitVector(Renderer.random));
             if (scatterDirection.LengthSquared() < 0.001f) {
                 scatterDirection = hitRecord.normal;
             }

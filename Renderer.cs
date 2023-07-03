@@ -7,7 +7,7 @@ namespace RaytracerSharp {
     public class Renderer {
         public int Width = 800;
         public int Height = 480;
-        public int SamplesPerPixelPerPass = 16;
+        public int SamplesPerPixelPerPass = 64;
         public int MaxDepth = 16;
         public bool UseSceneCamera = true;
 
@@ -20,6 +20,8 @@ namespace RaytracerSharp {
         private int currentRenderedLine = 0;
         private int currentRenderPass = 0;
         private Stopwatch currentFrameWatch = Stopwatch.StartNew();
+        private bool tookScreenshot = false;
+
         private Scene currentScene = DefinedScenes.CornellBox();
 
         private (Vector3 color, int samples)[,] accumulatedColor = new (Vector3 color, int samples)[1, 1];
@@ -54,7 +56,6 @@ namespace RaytracerSharp {
             Raylib.UpdateTextureRec(texture, new Rectangle(0, 0, Width, Height), target.data);
             while (!Raylib.WindowShouldClose()) {
                 RenderSceneToImage();
-                //RenderFromTexture(texture);
             }
             Raylib.CloseWindow();
         }
@@ -67,9 +68,9 @@ namespace RaytracerSharp {
             int targetLine = Math.Min(currentRenderedLine+16, Height);
             int samples = SamplesPerPixelPerPass;
             if (currentRenderPass == 0) {
-                samples = 2;
+                samples = 4;
             } else if (currentRenderPass == 1) {
-                samples = SamplesPerPixelPerPass-2;
+                samples = SamplesPerPixelPerPass-4;
             }
             Parallel.ForEach(Enumerable.Range(currentRenderedLine, targetLine-currentRenderedLine).ToList(), y => {
                 for (int x = 0; x < Width; x++) {
@@ -96,35 +97,44 @@ namespace RaytracerSharp {
                 currentFrameWatch.Stop();
                 long elapsedMs = currentFrameWatch.ElapsedMilliseconds;
                 Console.WriteLine($"Finished ({elapsedMs/1000.0f}s)");
+                if (accumulatedColor[0, 0].samples > 1000 && !tookScreenshot) {
+                    tookScreenshot = true;
+                    Console.WriteLine("Saving screenshot");
+                    Raylib.TakeScreenshot($"data/{System.DateTime.Now.Hour}h{System.DateTime.Now.Minute}m{System.DateTime.Now.Day}-{System.DateTime.Now.Month}-{System.DateTime.Now.Year}.png");
+                }
             }
         }
 
         private void RenderPixel(int x, int y, int numberOfSamples) {
-            for (int samples = 0; samples < numberOfSamples; samples++) {
-                Ray ray = Raylib.GetMouseRay(new Vector2(x+(float) (random.NextDouble())-0.5f, y+(float) (random.NextDouble())-0.5f), Camera);
-                accumulatedColor[x, y] = (accumulatedColor[x, y].color+RenderRay(ray, MaxDepth), accumulatedColor[x, y].samples+1);
+            for (int samples = 0; samples < 4; samples++) {
+                Ray ray = Raylib.GetMouseRay(new Vector2(x+random.NextSingle()-0.5f, y+random.NextSingle()-0.5f), Camera);
+                accumulatedColor[x, y] = (accumulatedColor[x, y].color+RenderRay(ray, MaxDepth, numberOfSamples/4), accumulatedColor[x, y].samples+numberOfSamples/4);
             }
             Vector3 colorVector = accumulatedColor[x, y].color/accumulatedColor[x, y].samples;
             colorVector = new Vector3(MathF.Sqrt(colorVector.X), MathF.Sqrt(colorVector.Y), MathF.Sqrt(colorVector.Z));
             Raylib.ImageDrawPixel(ref target, x, y, Helper.ColorFromVector(colorVector));
         }
 
-        private Vector3 RenderRay(Ray ray, int depth) {
+        private Vector3 RenderRay(Ray ray, int depth, int samples) {
             if (depth <= 0) {
                 return Vector3.Zero;
             }
             HitRecord? result = RayHitWorld(ray);
             if (result is HitRecord hit) {
-                var scattered = hit.Material.Scatter(ray, hit);
-                Vector3 emitted = hit.Material.Emit(hit.Uv);
-                if (scattered.reflect) {
-                    Vector3 col = scattered.attenuation*RenderRay(scattered.scattered, depth-1);
-                    //return h.normal*0.5f+Vector3.One*0.5f;
-                    return col+emitted;
+                Vector3 resultColor = new Vector3();
+                for (int i = 0; i < samples; i++) {
+                    var scattered = hit.Material.Scatter(ray, hit);
+                    Vector3 emitted = hit.Material.Emit(hit.Uv);
+                    if (scattered.reflect) {
+                        Vector3 col = scattered.attenuation*RenderRay(scattered.scattered, depth-1, 1);
+                        //return hit.normal*0.5f+Vector3.One*0.5f;
+                        resultColor += col+emitted;
+                    }
+                    resultColor += emitted;
                 }
-                return Vector3.Zero+emitted;
+                return resultColor;
             } else {
-                return currentScene.SkyFunction.Invoke(ray.direction);
+                return currentScene.SkyFunction.Invoke(ray.direction)*samples;
             }
         }
 
