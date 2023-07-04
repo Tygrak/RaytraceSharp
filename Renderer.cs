@@ -19,6 +19,7 @@ namespace RaytracerSharp {
 
         private int currentRenderedLine = 0;
         private int currentRenderPass = 0;
+        private Stopwatch totalWatch = Stopwatch.StartNew();
         private Stopwatch currentFrameWatch = Stopwatch.StartNew();
         private bool tookScreenshot = false;
 
@@ -46,6 +47,7 @@ namespace RaytracerSharp {
             if (UseSceneCamera) {
                 Camera = currentScene.DefaultCamera;
             }
+            totalWatch = Stopwatch.StartNew();
             RenderLoop();
         }
         
@@ -99,8 +101,9 @@ namespace RaytracerSharp {
                 Console.WriteLine($"Finished ({elapsedMs/1000.0f}s)");
                 if (accumulatedColor[0, 0].samples > 1000 && !tookScreenshot) {
                     tookScreenshot = true;
-                    Console.WriteLine("Saving screenshot");
-                    Raylib.TakeScreenshot($"data/{System.DateTime.Now.Hour}h{System.DateTime.Now.Minute}m{System.DateTime.Now.Day}-{System.DateTime.Now.Month}-{System.DateTime.Now.Year}.png");
+                    long totalMs = totalWatch.ElapsedMilliseconds;
+                    Console.WriteLine($"Saving screenshot ({totalMs/1000.0f})");
+                    Raylib.TakeScreenshot($"data/{totalMs/1000.0f}s{System.DateTime.Now.Hour}h{System.DateTime.Now.Minute}m{System.DateTime.Now.Day}-{System.DateTime.Now.Month}-{System.DateTime.Now.Year}.png");
                 }
             }
         }

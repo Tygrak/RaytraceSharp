@@ -5,8 +5,10 @@ namespace RaytracerSharp {
     static class Program {
 
         public static void Main() {
-            Renderer renderer = new Renderer();
-            renderer.Start();
+            //Renderer renderer = new Renderer();
+            //renderer.Start();
+            GPURenderer gpuRenderer = new GPURenderer();
+            gpuRenderer.Start();
         }
     }
 }
